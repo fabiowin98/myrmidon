@@ -27,13 +27,14 @@ class MyrmidonServerHandler implements Runnable {
 
     @Override
     public void run() {
-        ObjectInputStream input;
-        ObjectOutputStream output;
+        ObjectInputStream input = null;
+        ObjectOutputStream output = null;
         String methodName;
         ArrayList<Object> methodArgs;
         Method[] methods;
         int methodCount;
         Object ret;
+        boolean found = false;
         methodArgs = new ArrayList<>();
         try {
             input = new ObjectInputStream(socket.getInputStream());
@@ -45,10 +46,18 @@ class MyrmidonServerHandler implements Runnable {
             }
             methods = targetObject.getClass().getMethods();
             for (Method m : methods) {
-                if (m.getName().equals(methodName)) {
+                if ((m.getName().equals(methodName)) && (m.getParameterTypes().length == methodArgs.size())) {
+                    found = true;
                     m.setAccessible(true);
-                    synchronized (targetObject) {
-                        ret = m.invoke(targetObject, methodArgs.toArray());
+                    ret = null;
+                    try {
+                        synchronized (targetObject) {
+                            ret = m.invoke(targetObject, methodArgs.toArray());
+                        }
+                    } catch (Exception ex) {
+                        output.writeInt(-1);
+                        output.writeObject(ex);
+                        break;
                     }
                     if (ret != null) {
                         output.writeInt(1);
@@ -56,12 +65,23 @@ class MyrmidonServerHandler implements Runnable {
                     } else {
                         output.writeInt(0);
                     }
+                    break;
                 }
             }
-            output.flush();
-            output.close();
-            input.close();
-            socket.close();
+            if (!found) {
+                output.writeInt(-1);
+                output.writeObject(new Exception("method not found"));
+            }
+            if (output != null) {
+                output.flush();
+                output.close();
+            }
+            if (input != null) {
+                input.close();
+            }
+            if (socket != null) {
+                socket.close();
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }

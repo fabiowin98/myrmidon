@@ -39,9 +39,11 @@ public class MyrmidonClient {
         for(Object arg : args){
             output.writeObject(arg);
         }
+        while(input.available()==0) Thread.sleep(10);
         outputCount = input.readInt();
         if(outputCount!=0){
             toRet = input.readObject();
+            if(outputCount==-1) throw (Exception)toRet;
         }
         output.flush();
         output.close();
