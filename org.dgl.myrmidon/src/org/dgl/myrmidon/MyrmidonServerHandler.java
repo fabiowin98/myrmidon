@@ -19,10 +19,12 @@ class MyrmidonServerHandler implements Runnable {
 
     private Socket socket;
     private Object targetObject;
+    private MyrmidonServerExceptionListener exceptionListener;
 
-    public MyrmidonServerHandler(Object targetObject, Socket socket) {
+    public MyrmidonServerHandler(Object targetObject, Socket socket, MyrmidonServerExceptionListener exceptionListener) {
         this.socket = socket;
         this.targetObject = targetObject;
+        this.exceptionListener = exceptionListener;
     }
 
     @Override
@@ -35,6 +37,7 @@ class MyrmidonServerHandler implements Runnable {
         int methodCount;
         Object ret;
         boolean found = false;
+        Exception exception = null;
         methodArgs = new ArrayList<>();
         try {
             input = new ObjectInputStream(socket.getInputStream());
@@ -55,8 +58,9 @@ class MyrmidonServerHandler implements Runnable {
                             ret = m.invoke(targetObject, methodArgs.toArray());
                         }
                     } catch (Exception ex) {
+                        exception = ex;
                         output.writeInt(-1);
-                        output.writeObject(ex);
+                        output.writeObject(exception);
                         break;
                     }
                     if (ret != null) {
@@ -69,21 +73,24 @@ class MyrmidonServerHandler implements Runnable {
                 }
             }
             if (!found) {
+                exception = new Exception("method not found");
                 output.writeInt(-1);
-                output.writeObject(new Exception("method not found"));
+                output.writeObject(exception);
             }
-            if (output != null) {
-                output.flush();
-                output.close();
-            }
-            if (input != null) {
-                input.close();
-            }
+            output.flush();
+            output.close();
+            input.close();
             if (socket != null) {
                 socket.close();
             }
         } catch (Exception e) {
+            exception = e;
             e.printStackTrace();
+        } finally {
+            if ((exceptionListener != null) && (exception != null)) {
+                exceptionListener.CatchMyrmidonServerException(socket, exception);
+            }
         }
     }
+
 }
